@@ -142,7 +142,7 @@ router.get("/products/:handle", async (req, res) => {
 //    GET /collections?first=10&after=CURSOR
 // ---------------------------------------------
 // -------------------- GET COLLECTIONS WITH 4 PRODUCTS EACH --------------------
-// router.get("/all-collections", async (req, res) => {
+//  router.get("/all-collections", async (req, res) => {
 //   const { cursor } = req.query;
 //   const pagination = cursor ? `after: "${cursor}"` : "";
 
@@ -210,7 +210,111 @@ router.get("/products/:handle", async (req, res) => {
 //       .status(500)
 //       .json({ error: "Failed to fetch collections", details: err.message });
 //   }
-// });
+//  });
+
+
+router.get("/all-collections", async (req, res) => {
+  const { cursor } = req.query;
+  const pagination = cursor ? `after: "${cursor}"` : "";
+
+  const query = gql`
+    {
+      collections(first: 140, ${pagination}) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        edges {
+          cursor
+          node {
+            id
+            title
+            handle
+            updatedAt
+            description
+            products(first: 10) {
+              edges {
+                node {
+                  id
+                  title
+                  handle
+                  createdAt
+                  description
+                  images(first: 1) {
+                    edges {
+                      node {
+                        url
+                      }
+                    }
+                  }
+                  variants(first: 1) {
+                    edges {
+                      node {
+                        price {
+                          amount
+                        }
+                        compareAtPrice {
+                          amount
+                        }
+                      }
+                    }
+                  }
+                  metafield(namespace: "custom", key: "money_price") {
+                    value
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  try {
+    const data = await request(SHOPIFY_ENDPOINT, query, {}, HEADERS);
+
+    const formattedCollections = data.collections.edges.map((edge) => {
+      const collection = edge.node;
+      const products = collection.products.edges.map((p) => {
+        const product = p.node;
+        return {
+          id: product.id,
+          title: product.title,
+          handle: product.handle,
+          createdAt: product.createdAt,
+          description: product.description,
+          image: product.images?.edges?.[0]?.node?.url || null,
+          salePrice: product.variants?.edges?.[0]?.node?.price?.amount || null,
+          comparePrice: product.variants?.edges?.[0]?.node?.compareAtPrice?.amount || null,
+          moneyPrice: product.metafield?.value || null,
+        };
+      });
+
+      return {
+        cursor: edge.cursor,
+        id: collection.id,
+        title: collection.title,
+        handle: collection.handle,
+        updatedAt: collection.updatedAt,
+        description: collection.description,
+        products,
+      };
+    });
+
+    res.json({
+      collections: formattedCollections,
+      pageInfo: data.collections.pageInfo,
+      lastCursor: data.collections.pageInfo.endCursor,
+    });
+  } catch (err) {
+    res.status(500).json({
+      error: "Failed to fetch collections",
+      details: err.message,
+    });
+  }
+});
+
 
 // router.get("/all-collections", async (req, res) => {
 //   let allCollections = [];
@@ -552,135 +656,134 @@ router.get("/products/:handle", async (req, res) => {
 
 
 
-// ✅ Target collections
-const TARGET_COLLECTIONS = ["television", "headphones", "soundbar", "speakers", "cameras"];
+// const TARGET_COLLECTIONS = ["television", "headphones", "soundbar", "speakers", "cameras"];
 
-router.get("/all-collections", async (req, res) => {
-  try {
-    const query = gql`
-      {
-        collections(first: 20) {
-          edges {
-            node {
-              id
-              title
-              handle
-              updatedAt
-              products(first: 10) {
-                edges {
-                  node {
-                    id
-                    title
-                    handle
-                    createdAt
-                    description
-                    images(first: 1) {
-                      edges {
-                        node {
-                          url
-                        }
-                      }
-                    }
-                    variants(first: 1) {
-                      edges {
-                        node {
-                          price {
-                            amount
-                          }
-                          compareAtPrice {
-                            amount
-                          }
-                        }
-                      }
-                    }
-                    metafield(namespace: "custom", key: "money_price") {
-                      value
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    `;
+// router.get("/all-collections", async (req, res) => {
+//   try {
+//     const query = gql`
+//       {
+//         collections(first: 20) {
+//           edges {
+//             node {
+//               id
+//               title
+//               handle
+//               updatedAt
+//               products(first: 10) {
+//                 edges {
+//                   node {
+//                     id
+//                     title
+//                     handle
+//                     createdAt
+//                     description
+//                     images(first: 1) {
+//                       edges {
+//                         node {
+//                           url
+//                         }
+//                       }
+//                     }
+//                     variants(first: 1) {
+//                       edges {
+//                         node {
+//                           price {
+//                             amount
+//                           }
+//                           compareAtPrice {
+//                             amount
+//                           }
+//                         }
+//                       }
+//                     }
+//                     metafield(namespace: "custom", key: "money_price") {
+//                       value
+//                     }
+//                   }
+//                 }
+//               }
+//             }
+//           }
+//         }
+//       }
+//     `;
 
-    // ✅ Storefront API Call
-    const storefrontRes = await request(SHOPIFY_ENDPOINT, query, {}, HEADERS);
+//     // ✅ Storefront API Call
+//     const storefrontRes = await request(SHOPIFY_ENDPOINT, query, {}, HEADERS);
 
-    // ✅ Filter collections by title or handle
-    const matchingCollections = storefrontRes.collections.edges.filter(({ node }) => {
-      const lowerTitle = node.title.toLowerCase();
-      const lowerHandle = node.handle.toLowerCase();
-      return TARGET_COLLECTIONS.some(
-        (target) => lowerTitle.includes(target) || lowerHandle.includes(target)
-      );
-    });
+//     // ✅ Filter collections by title or handle
+//     const matchingCollections = storefrontRes.collections.edges.filter(({ node }) => {
+//       const lowerTitle = node.title.toLowerCase();
+//       const lowerHandle = node.handle.toLowerCase();
+//       return TARGET_COLLECTIONS.some(
+//         (target) => lowerTitle.includes(target) || lowerHandle.includes(target)
+//       );
+//     });
 
-    // ✅ Gather product GIDs from filtered collections
-    const allProducts = [];
-    for (const collectionEdge of matchingCollections) {
-      const products = collectionEdge.node.products.edges.map((p) => p.node);
-      allProducts.push(...products);
-    }
+//     // ✅ Gather product GIDs from filtered collections
+//     const allProducts = [];
+//     for (const collectionEdge of matchingCollections) {
+//       const products = collectionEdge.node.products.edges.map((p) => p.node);
+//       allProducts.push(...products);
+//     }
 
-    const productGIDs = allProducts.map((p) => p.id);
+//     const productGIDs = allProducts.map((p) => p.id);
 
-    // ✅ Admin API Call to get product statuses
-    const adminQuery = {
-      query: `
-        {
-          nodes(ids: [${productGIDs.map((id) => `"${id}"`).join(",")}]) {
-            ... on Product {
-              id
-              status
-            }
-          }
-        }
-      `,
-    };
+//     // ✅ Admin API Call to get product statuses
+//     const adminQuery = {
+//       query: `
+//         {
+//           nodes(ids: [${productGIDs.map((id) => `"${id}"`).join(",")}]) {
+//             ... on Product {
+//               id
+//               status
+//             }
+//           }
+//         }
+//       `,
+//     };
 
-    const adminRes = await axios.post(ADMIN_API, adminQuery, { headers: ADMIN_HEADERS });
+//     const adminRes = await axios.post(ADMIN_API, adminQuery, { headers: ADMIN_HEADERS });
 
-    const statusMap = {};
-    for (const product of adminRes.data.data.nodes) {
-      if (product) statusMap[product.id] = product.status;
-    }
+//     const statusMap = {};
+//     for (const product of adminRes.data.data.nodes) {
+//       if (product) statusMap[product.id] = product.status;
+//     }
 
-    // ✅ Construct final response with only ACTIVE products
-    const finalCollections = matchingCollections.map(({ node: collection }) => {
-      const filteredProducts = collection.products.edges
-        .map((p) => p.node)
-        .filter((p) => statusMap[p.id] === "ACTIVE")
-        .map((p) => ({
-          id: p.id,
-          title: p.title,
-          handle: p.handle,
-          createdAt: p.createdAt,
-          description: p.description,
-          image: p.images?.edges?.[0]?.node?.url || null,
-          salePrice: p.variants?.edges?.[0]?.node?.price?.amount || null,
-          comparePrice: p.variants?.edges?.[0]?.node?.compareAtPrice?.amount || null,
-          moneyPrice: p.metafield?.value || null,
-        }));
+//     // ✅ Construct final response with only ACTIVE products
+//     const finalCollections = matchingCollections.map(({ node: collection }) => {
+//       const filteredProducts = collection.products.edges
+//         .map((p) => p.node)
+//         .filter((p) => statusMap[p.id] === "ACTIVE")
+//         .map((p) => ({
+//           id: p.id,
+//           title: p.title,
+//           handle: p.handle,
+//           createdAt: p.createdAt,
+//           description: p.description,
+//           image: p.images?.edges?.[0]?.node?.url || null,
+//           salePrice: p.variants?.edges?.[0]?.node?.price?.amount || null,
+//           comparePrice: p.variants?.edges?.[0]?.node?.compareAtPrice?.amount || null,
+//           moneyPrice: p.metafield?.value || null,
+//         }));
 
-      return {
-        id: collection.id,
-        title: collection.title,
-        handle: collection.handle,
-        updatedAt: collection.updatedAt,
-        products: filteredProducts,
-      };
-    });
+//       return {
+//         id: collection.id,
+//         title: collection.title,
+//         handle: collection.handle,
+//         updatedAt: collection.updatedAt,
+//         products: filteredProducts,
+//       };
+//     });
 
-    res.json(finalCollections);
-  } catch (err) {
-    console.error("Error fetching collections:", err?.response?.data || err.message || err);
-    res.status(500).json({ error: "Failed to fetch collections", details: err?.message || "Unknown error" });
-  }
-});
+//     res.json(finalCollections);
+//   } catch (err) {
+//     console.error("Error fetching collections:", err?.response?.data || err.message || err);
+//     res.status(500).json({ error: "Failed to fetch collections", details: err?.message || "Unknown error" });
+//   }
+// });
 
-module.exports = router;
+// module.exports = router;
 
 // ---------------------------------------------
 // 4. Customer authentication
